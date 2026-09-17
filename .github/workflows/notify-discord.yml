@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   notify:
@@ -24,9 +25,11 @@ jobs:
     if: >-
       (github.event_name == 'pull_request_review' &&
         (github.event.review.state == 'changes_requested' ||
-         (github.event.review.state == 'commented' && github.event.review.body != '')))
+         github.event.review.state == 'commented'))
       ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure')
+      (github.event_name == 'workflow_run' &&
+        (github.event.workflow_run.conclusion == 'failure' ||
+         github.event.workflow_run.conclusion == 'startup_failure'))
     steps:
       - name: Resolve PR number
         id: pr
@@ -92,12 +95,16 @@ jobs:
           FEEDBACK: ${{ steps.feedback.outputs.text }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::Secret DISCORD_WEBHOOK_URL belum di-set di repo settings"
+            exit 1
+          fi
           PAYLOAD=$(jq -n \
             --arg content "<@1550158295807959122>, PR #${NUMBER} di repo \`${REPO}\` mendapat feedback baru. Baca PR-nya, lalu perbaiki, tes, dan push ke branch PR tersebut." \
             --arg pr "PR #${NUMBER}: ${TITLE}" \
             --arg url "https://github.com/${REPO}/pull/${NUMBER}" \
             --arg fb "$FEEDBACK" \
             --arg run "$RUN_URL" \
-            '{content: $content, embeds: [{title: $pr, url: $url, description: $fb, color: 15158332, footer: {text: ("trigger: " + $run)}}]}')
+            '{content: $content, allowed_mentions: {parse: [\"users\"]}, embeds: [{title: ($pr | .[0:250]), url: $url, description: ($fb | .[0:3900]), color: 15158332, footer: {text: (\"trigger: \" + $run)}}]}')
           curl -sf -X POST -H 'Content-Type: application/json' \
             -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
