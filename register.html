@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account — AskLumia</title>
+  <meta name="description" content="Create your AskLumia account and start asking your first research question." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ctext x='16' y='22' font-size='16' font-family='sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="register.css" />
+</head>
+<body class="auth-body">
+
+  <!-- ===== NAVBAR (simplified) ===== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a href="index.html" class="logo">
+        <span class="logo-mark">A</span>
+        <span class="logo-text">AskLumia</span>
+      </a>
+      <div class="nav-cta">
+        <a href="index.html" class="btn btn-ghost btn-sm">← Back to Home</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== REGISTRATION FORM ===== -->
+  <main class="auth-main">
+    <div class="auth-card">
+      <div class="auth-head">
+        <span class="eyebrow">Get Started Free</span>
+        <h2>Create your account</h2>
+        <p>Start exploring customer insights with Digital Personas.</p>
+      </div>
+
+      <form id="registerForm" novalidate>
+        <!-- Full name -->
+        <div class="form-group">
+          <label for="fullName">Full Name</label>
+          <input type="text" id="fullName" name="fullName" placeholder="e.g. Sari Wijaya" autocomplete="name" />
+          <small class="error-msg" id="nameError"></small>
+        </div>
+
+        <!-- Email -->
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" name="email" placeholder="you@company.com" autocomplete="email" />
+          <small class="error-msg" id="emailError"></small>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="password-wrap">
+            <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="new-password" />
+            <button type="button" class="toggle-pass" data-target="password" aria-label="Show password">👁</button>
+          </div>
+          <small class="error-msg" id="passwordError"></small>
+
+          <!-- Live password requirements checklist -->
+          <ul class="pass-rules" id="passRules">
+            <li data-rule="length"><span class="rule-icon">○</span> Minimum 8 characters</li>
+            <li data-rule="lower"><span class="rule-icon">○</span> At least one lowercase letter (a–z)</li>
+            <li data-rule="upper"><span class="rule-icon">○</span> At least one uppercase letter (A–Z)</li>
+            <li data-rule="special"><span class="rule-icon">○</span> At least one special character (!@#$%…)</li>
+          </ul>
+        </div>
+
+        <!-- Confirm Password -->
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password</label>
+          <div class="password-wrap">
+            <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Re-enter your password" autocomplete="new-password" />
+            <button type="button" class="toggle-pass" data-target="confirmPassword" aria-label="Show password">👁</button>
+          </div>
+          <small class="error-msg" id="confirmError"></small>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Create Account</button>
+
+        <p class="auth-switch">
+          Already have an account?
+          <a href="#" id="loginLink">Log in</a>
+        </p>
+      </form>
+
+      <!-- Success state -->
+      <div class="auth-success" id="authSuccess" hidden>
+        <div class="success-icon">✓</div>
+        <h3>Account created!</h3>
+        <p>Welcome to AskLumia, <strong id="successName"></strong>. Redirecting you to the dashboard…</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="register.js"></script>
+</body>
+</html>
