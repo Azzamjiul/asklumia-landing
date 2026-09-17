@@ -29,7 +29,10 @@ jobs:
         uses: pullfrog/pullfrog@v0
         with:
           prompt: ${{ inputs.prompt }}
+          model: zai/glm-5.3
         env:
+          # zai/glm-5.3 (Z.AI open platform) — https://models.dev (provider: zai)
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           # add at least one provider API key
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
