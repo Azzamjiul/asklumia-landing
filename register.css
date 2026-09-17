@@ -22,7 +22,11 @@
 }
 
 .auth-head { text-align: center; margin-bottom: 30px; }
+.auth-head h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 800; }
 .auth-head p { color: var(--ink-soft); margin-top: 8px; font-size: 0.95rem; }
+
+/* Buttons are <button> here, not <a> — UA stylesheets give them their own font. */
+button.btn { font-family: inherit; }
 
 /* Form fields */
 .form-group { margin-bottom: 18px; }
@@ -74,6 +78,7 @@
 
 /* Success state */
 .auth-success { text-align: center; padding: 30px 0 10px; }
+.auth-success h3:focus { outline: none; }
 .success-icon {
   width: 64px; height: 64px; margin: 0 auto 18px;
   display: grid; place-items: center;
