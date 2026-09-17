@@ -1,0 +1,121 @@
+name: Notify Discord on PR feedback
+
+# Diagram alur:
+#   Review/CI selesai -> perlu perbaikan? -> Ya: mention @Clanker (bot) di Discord
+#   (thread baru: baca PR & feedback -> perbaiki, tes, push ke branch PR)
+#   Tidak: tunggu review manusia sebelum merge.
+#
+# Test manual: gh workflow run notify-discord.yml -f pr_number=3 -f feedback="tes"
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    workflows: ["Pullfrog"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Nomor PR"
+        required: true
+      feedback:
+        description: "Isi feedback (opsional)"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    # "Perlu perbaikan?" filter:
+    #  - review submitted: Request Changes ATAU komentar (dengan/tanpa body)
+    #  - Pullfrog (CI agent) selesai gagal
+    #  - workflow_dispatch (tes manual)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_review' &&
+        (github.event.review.state == 'changes_requested' ||
+         github.event.review.state == 'commented'))
+      ||
+      (github.event_name == 'workflow_run' &&
+        (github.event.workflow_run.conclusion == 'failure' ||
+         github.event.workflow_run.conclusion == 'startup_failure'))
+    steps:
+      - name: Notify Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          WR_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WR_URL: ${{ github.event.workflow_run.html_url }}
+          DISPATCH_FEEDBACK: ${{ inputs.feedback }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::error::Secret DISCORD_WEBHOOK_URL belum di-set di repo settings"
+            exit 1
+          fi
+
+          # --- resolve PR ---
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            PR_JSON=$(gh pr list -R "$REPO" --state open --head "$WR_BRANCH" --json number,title --limit 1)
+            PR_NUMBER=$(echo "$PR_JSON" | jq -r '.[0].number // ""')
+            PR_TITLE=$(echo "$PR_JSON" | jq -r '.[0].title // ""')
+            if [ -z "$PR_NUMBER" ]; then
+              echo "Tidak ada PR terbuka untuk branch $WR_BRANCH — skip."
+              exit 0
+            fi
+          fi
+          if [ -z "$PR_TITLE" ]; then
+            PR_TITLE=$(gh pr view "$PR_NUMBER" -R "$REPO" --json title -q .title)
+          fi
+
+          # --- susun feedback ke file (bebas masalah heredoc delimiter) ---
+          case "$EVENT_NAME" in
+            pull_request_review)
+              { echo "Reviewer: @$REVIEWER (state: $REVIEW_STATE)"; echo "$REVIEW_BODY"; } > feedback.md
+              ;;
+            workflow_run)
+              echo "CI (Pullfrog) gagal pada commit PR ini. Log: $WR_URL" > feedback.md
+              ;;
+            *)
+              # workflow_dispatch
+              if [ -n "$DISPATCH_FEEDBACK" ]; then
+                echo "$DISPATCH_FEEDBACK" > feedback.md
+              else
+                echo "Tes manual trigger." > feedback.md
+              fi
+              ;;
+          esac
+          # komentar review terakhir (jalur review & dispatch)
+          if [ "$EVENT_NAME" != "workflow_run" ]; then
+            {
+              echo ""
+              echo "Komentar review terakhir:"
+              gh api "repos/$REPO/pulls/$PR_NUMBER/comments" \
+                --jq '.[-5:][] | "- @\(.user.login) (\(.path)):\n> \(.body | gsub("\n"; "\n> "))"' || true
+            } >> feedback.md
+          fi
+
+          # --- payload + kirim (embed: title<=256, desc<=4096) ---
+          jq -n \
+            --arg content "<@1550158295807959122>, PR #${PR_NUMBER} di repo \`${REPO}\` mendapat feedback baru. Baca PR-nya, lalu perbaiki, tes, dan push ke branch PR tersebut." \
+            --arg pr "PR #${PR_NUMBER}: ${PR_TITLE}" \
+            --arg url "https://github.com/${REPO}/pull/${PR_NUMBER}" \
+            --rawfile fb feedback.md \
+            --arg run "$RUN_URL" \
+            '{content: $content, allowed_mentions: {parse: ["users"]},
+              embeds: [{title: ($pr | .[0:250]), url: $url,
+                        description: ($fb | .[0:3900]), color: 15158332,
+                        footer: {text: ("trigger: " + $run)}}]}' > payload.json
+          curl -sf -X POST -H 'Content-Type: application/json' \
+            -d @payload.json "$DISCORD_WEBHOOK_URL"
