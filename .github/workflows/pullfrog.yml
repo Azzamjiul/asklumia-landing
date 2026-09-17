@@ -29,9 +29,10 @@ jobs:
         uses: pullfrog/pullfrog@v0
         with:
           prompt: ${{ inputs.prompt }}
-          model: zai/glm-5.3
+          model: zai-coding-plan/glm-5.3
         env:
-          # zai/glm-5.3 (Z.AI open platform) — https://models.dev (provider: zai)
+          # zai-coding-plan/glm-5.3 (Z.AI Coding Plan) — https://models.dev (provider: zai-coding-plan)
+          # endpoint otomatis: https://api.z.ai/api/coding/paas/v4
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           # add at least one provider API key
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
