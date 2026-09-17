@@ -1,0 +1,103 @@
+name: Notify Discord on PR feedback
+
+# Diagram alur:
+#   Review/CI selesai -> perlu perbaikan? -> Ya: mention @Clanker di Discord
+#   (thread baru: baca PR & feedback -> perbaiki, tes, push ke branch PR)
+#   Tidak: tunggu review manusia sebelum merge.
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    workflows: ["Pullfrog"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    # "Perlu perbaikan?" filter:
+    #  - review submitted dengan "Request Changes" ATAU komentar baru
+    #  - Pullfrog (CI agent) selesai dengan gagal
+    if: >-
+      (github.event_name == 'pull_request_review' &&
+        (github.event.review.state == 'changes_requested' ||
+         (github.event.review.state == 'commented' && github.event.review.body != '')))
+      ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure')
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          WR_ID: ${{ github.event.workflow_run.id }}
+          WR_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request_review" ]; then
+            echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+            echo "trigger=review" >> "$GITHUB_OUTPUT"
+          else
+            # workflow_run: cari PR terbuka untuk branch head
+            PR_JSON=$(gh pr list -R "$REPO" --state open --head "$WR_BRANCH" --json number,title --limit 1)
+            NUM=$(echo "$PR_JSON" | jq -r '.[0].number // ""')
+            TITLE=$(echo "$PR_JSON" | jq -r '.[0].title // ""')
+            if [ -z "$NUM" ]; then
+              echo "Tidak ada PR terbuka untuk branch $WR_BRANCH — skip."; exit 0
+            fi
+            echo "number=$NUM" >> "$GITHUB_OUTPUT"
+            echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+            echo "trigger=ci" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect feedback
+        id: feedback
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          REVIEW_BODY: ${{ github.event.review.body }}
+          REVIEWER: ${{ github.event.review.user.login }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          TRIGGER: ${{ steps.pr.outputs.trigger }}
+        run: |
+          {
+            echo 'text<<FEEDBACK_EOF'
+            if [ "$TRIGGER" = "review" ]; then
+              echo "Reviewer: @$REVIEWER (state: $REVIEW_STATE)"
+              echo "$REVIEW_BODY"
+            else
+              echo "CI (Pullfrog) gagal pada commit PR ini. Log: ${{ github.event.workflow_run.html_url }}"
+            fi
+            echo ""
+            echo "Komentar review terbaru:"
+            gh api "repos/$REPO/pulls/$NUMBER/comments" --jq '.[-5:][] | "- @\(.user.login): \(.body)"' 2>/dev/null || true
+            echo FEEDBACK_EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Discord notification
+        if: steps.pr.outputs.number != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          TITLE: ${{ steps.pr.outputs.title }}
+          REPO: ${{ github.repository }}
+          FEEDBACK: ${{ steps.feedback.outputs.text }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg content "@Clanker, PR #${NUMBER} di repo \`${REPO}\` mendapat feedback baru. Baca PR-nya, lalu perbaiki, tes, dan push ke branch PR tersebut." \
+            --arg pr "PR #${NUMBER}: ${TITLE}" \
+            --arg url "https://github.com/${REPO}/pull/${NUMBER}" \
+            --arg fb "$FEEDBACK" \
+            --arg run "$RUN_URL" \
+            '{content: $content, embeds: [{title: $pr, url: $url, description: $fb, color: 15158332, footer: {text: ("trigger: " + $run)}}]}')
+          curl -sf -X POST -H 'Content-Type: application/json' \
+            -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
